@@ -44,6 +44,18 @@ cd Go
 go run main.go USD RUB 100
 ```
 
+**История конвертаций:**
+```bash
+cd Go
+go run main.go --history
+```
+
+**JSON вывод:**
+```bash
+cd Go
+go run main.go --json USD RUB 100
+```
+
 ### Запуск скомпилированной программы
 
 После компиляции можно запускать программу напрямую:
@@ -173,3 +185,62 @@ Go/
 - `convertCurrency()` - конвертация валюты
 - `printResult()` - форматированный вывод результата
 - `formatTimeAgo()` - форматирование времени с последнего обновления
+- `saveToHistory()` - сохранение конвертации в историю
+- `showHistory()` - отображение истории конвертаций
+- `outputJSON()` - вывод результата в JSON формате
+- `outputError()` - вывод ошибок в JSON формате
+
+## Новые возможности
+
+### История конвертаций
+
+Каждая конвертация автоматически сохраняется в файл `history.json` в директории программы. Просмотр истории:
+
+```bash
+go run main.go --history
+```
+
+Формат записи истории:
+```json
+[
+  {
+    "timestamp": "2026-01-02T15:30:45.123456Z",
+    "from_currency": "USD",
+    "to_currency": "RUB",
+    "amount": 100.0,
+    "result": 9150.50,
+    "exchange_rate": 91.505,
+    "rate_update_time": "2026-01-02T12:00:00Z"
+  }
+]
+```
+
+### JSON вывод
+
+Для использования в скриптах и автоматизации используйте флаг `--json`:
+
+```bash
+go run main.go --json USD RUB 100
+```
+
+Пример ответа:
+```json
+{
+  "success": true,
+  "timestamp": "2026-01-02T15:30:45.123456Z",
+  "from_currency": "USD",
+  "to_currency": "RUB",
+  "amount": 100.0,
+  "result": 9150.50,
+  "exchange_rate": 91.505,
+  "rate_update_time": "2026-01-02T12:00:00Z"
+}
+```
+
+При ошибке:
+```json
+{
+  "success": false,
+  "error": "описание ошибки"
+}
+```

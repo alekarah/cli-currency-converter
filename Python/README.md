@@ -43,6 +43,16 @@ python main.py
 python main.py [ИСХОДНАЯ_ВАЛЮТА] [ЦЕЛЕВАЯ_ВАЛЮТА] [СУММА]
 ```
 
+**История конвертаций:**
+```bash
+python main.py --history
+```
+
+**JSON вывод:**
+```bash
+python main.py --json USD RUB 100
+```
+
 Где:
 - `ИСХОДНАЯ_ВАЛЮТА` - код валюты, из которой конвертируем (USD, EUR, RUB и т.д.)
 - `ЦЕЛЕВАЯ_ВАЛЮТА` - код валюты, в которую конвертируем
@@ -164,6 +174,78 @@ Python/
 - `format_time_ago()` - форматирование времени с последнего обновления
 - `get_input()` - получение и валидация ввода от пользователя
 - `get_amount()` - получение и валидация суммы для конвертации
+- `save_to_history()` - сохранение конвертации в историю
+- `show_history()` - отображение истории конвертаций
+- `output_json()` - вывод результата в JSON формате
+- `output_error()` - вывод ошибок в JSON формате
+
+## Новые возможности
+
+### История конвертаций
+
+Каждая конвертация автоматически сохраняется в файл `history.json` в директории программы. Просмотр истории:
+
+```bash
+python main.py --history
+```
+
+Формат записи истории:
+```json
+[
+  {
+    "timestamp": "2026-01-02T15:30:45.123456",
+    "from_currency": "USD",
+    "to_currency": "RUB",
+    "amount": 100.0,
+    "result": 9150.50,
+    "exchange_rate": 91.505,
+    "rate_update_time": "2026-01-02T12:00:00"
+  }
+]
+```
+
+### JSON вывод
+
+Для использования в скриптах и автоматизации используйте флаг `--json`:
+
+```bash
+python main.py --json USD RUB 100
+```
+
+Пример ответа:
+```json
+{
+  "success": true,
+  "timestamp": "2026-01-02T15:30:45.123456",
+  "from_currency": "USD",
+  "to_currency": "RUB",
+  "amount": 100.0,
+  "result": 9150.50,
+  "exchange_rate": 91.505,
+  "rate_update_time": "2026-01-02T12:00:00"
+}
+```
+
+При ошибке:
+```json
+{
+  "success": false,
+  "error": "описание ошибки"
+}
+```
+
+Использование в bash-скриптах с `jq`:
+```bash
+# Получить только результат конвертации
+result=$(python main.py --json USD RUB 100 | jq -r '.result')
+echo "Результат: $result RUB"
+
+# Проверить успешность операции
+success=$(python main.py --json USD RUB 100 | jq -r '.success')
+if [ "$success" = "true" ]; then
+  echo "Конвертация успешна"
+fi
+```
 
 ## Отладка и разработка
 

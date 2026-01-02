@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -21,51 +22,125 @@ type ExchangeRateResponse struct {
 	TimeLastUpdated  int64              `json:"time_last_updated"`
 }
 
+// ConversionRecord запись об одной конвертации
+type ConversionRecord struct {
+	Timestamp      time.Time `json:"timestamp"`
+	FromCurrency   string    `json:"from_currency"`
+	ToCurrency     string    `json:"to_currency"`
+	Amount         float64   `json:"amount"`
+	Result         float64   `json:"result"`
+	ExchangeRate   float64   `json:"exchange_rate"`
+	RateUpdateTime time.Time `json:"rate_update_time"`
+}
+
+// JSONOutput структура для JSON вывода результата
+type JSONOutput struct {
+	Success        bool      `json:"success"`
+	Timestamp      time.Time `json:"timestamp"`
+	FromCurrency   string    `json:"from_currency"`
+	ToCurrency     string    `json:"to_currency"`
+	Amount         float64   `json:"amount"`
+	Result         float64   `json:"result"`
+	ExchangeRate   float64   `json:"exchange_rate"`
+	RateUpdateTime time.Time `json:"rate_update_time"`
+}
+
 const (
-	apiURL = "https://api.exchangerate-api.com/v4/latest/"
+	apiURL      = "https://api.exchangerate-api.com/v4/latest/"
+	historyFile = "history.json"
 )
 
 func main() {
-	printHeader()
+	// Проверяем флаг --history
+	if len(os.Args) > 1 && os.Args[1] == "--history" {
+		showHistory()
+		return
+	}
+
+	// Проверяем флаг --json
+	jsonOutput := false
+	args := os.Args[1:]
+	for i, arg := range args {
+		if arg == "--json" {
+			jsonOutput = true
+			args = append(args[:i], args[i+1:]...)
+			break
+		}
+	}
+
+	if !jsonOutput {
+		printHeader()
+	}
 
 	// Получаем параметры из командной строки или интерактивно
 	var fromCurrency, toCurrency string
 	var amount float64
 
-	if len(os.Args) == 4 {
+	if len(args) == 3 {
 		// Режим с аргументами командной строки
-		fromCurrency = strings.ToUpper(os.Args[1])
-		toCurrency = strings.ToUpper(os.Args[2])
+		fromCurrency = strings.ToUpper(args[0])
+		toCurrency = strings.ToUpper(args[1])
 		var err error
-		amount, err = strconv.ParseFloat(os.Args[3], 64)
+		amount, err = strconv.ParseFloat(args[2], 64)
 		if err != nil {
-			color.Red("❌ Ошибка: неверная сумма")
+			if jsonOutput {
+				outputError("неверная сумма")
+			} else {
+				color.Red("❌ Ошибка: неверная сумма")
+			}
 			os.Exit(1)
 		}
-	} else {
+	} else if len(args) == 0 {
 		// Интерактивный режим
 		fromCurrency = getInput("Введите исходную валюту (например, USD): ")
 		toCurrency = getInput("Введите целевую валюту (например, RUB): ")
 		amount = getAmount("Введите сумму для конвертации: ")
+	} else {
+		if jsonOutput {
+			outputError("неверное количество аргументов")
+		} else {
+			color.Red("❌ Использование: %s [--json] <from> <to> <amount>", os.Args[0])
+			color.Red("   или: %s --history", os.Args[0])
+		}
+		os.Exit(1)
 	}
 
 	// Получаем курсы валют
-	color.Cyan("🔄 Загрузка актуальных курсов валют...")
+	if !jsonOutput {
+		color.Cyan("🔄 Загрузка актуальных курсов валют...")
+	}
 	rates, err := getExchangeRates(fromCurrency)
 	if err != nil {
-		color.Red("❌ Ошибка при получении курсов: %v", err)
+		if jsonOutput {
+			outputError(fmt.Sprintf("ошибка при получении курсов: %v", err))
+		} else {
+			color.Red("❌ Ошибка при получении курсов: %v", err)
+		}
 		os.Exit(1)
 	}
 
 	// Выполняем конвертацию
 	result, err := convertCurrency(amount, fromCurrency, toCurrency, rates)
 	if err != nil {
-		color.Red("❌ Ошибка конвертации: %v", err)
+		if jsonOutput {
+			outputError(fmt.Sprintf("ошибка конвертации: %v", err))
+		} else {
+			color.Red("❌ Ошибка конвертации: %v", err)
+		}
 		os.Exit(1)
 	}
 
+	// Сохраняем в историю
+	rate := rates.Rates[toCurrency]
+	updateTime := time.Unix(rates.TimeLastUpdated, 0)
+	saveToHistory(fromCurrency, toCurrency, amount, result, rate, updateTime)
+
 	// Выводим результат
-	printResult(amount, fromCurrency, result, toCurrency, rates)
+	if jsonOutput {
+		outputJSON(fromCurrency, toCurrency, amount, result, rate, updateTime)
+	} else {
+		printResult(amount, fromCurrency, result, toCurrency, rates)
+	}
 }
 
 // printHeader выводит заголовок программы
@@ -196,5 +271,117 @@ func printResult(amount float64, from string, result float64, to string, rates *
 	fmt.Println()
 	color.Set(color.FgYellow, color.Bold)
 	fmt.Println("═══════════════════════════════════════════")
+	color.Unset()
+}
+
+// outputJSON выводит результат в формате JSON
+func outputJSON(from, to string, amount, result, rate float64, updateTime time.Time) {
+	output := JSONOutput{
+		Success:        true,
+		Timestamp:      time.Now(),
+		FromCurrency:   from,
+		ToCurrency:     to,
+		Amount:         amount,
+		Result:         result,
+		ExchangeRate:   rate,
+		RateUpdateTime: updateTime,
+	}
+
+	data, err := json.MarshalIndent(output, "", "  ")
+	if err != nil {
+		outputError(fmt.Sprintf("ошибка формирования JSON: %v", err))
+		os.Exit(1)
+	}
+
+	fmt.Println(string(data))
+}
+
+// outputError выводит ошибку в формате JSON
+func outputError(message string) {
+	output := map[string]interface{}{
+		"success": false,
+		"error":   message,
+	}
+	data, _ := json.MarshalIndent(output, "", "  ")
+	fmt.Println(string(data))
+}
+
+// getHistoryPath возвращает путь к файлу истории
+func getHistoryPath() string {
+	execPath, err := os.Executable()
+	if err != nil {
+		return historyFile
+	}
+	return filepath.Join(filepath.Dir(execPath), historyFile)
+}
+
+// saveToHistory сохраняет запись в историю конвертаций
+func saveToHistory(from, to string, amount, result, rate float64, updateTime time.Time) {
+	record := ConversionRecord{
+		Timestamp:      time.Now(),
+		FromCurrency:   from,
+		ToCurrency:     to,
+		Amount:         amount,
+		Result:         result,
+		ExchangeRate:   rate,
+		RateUpdateTime: updateTime,
+	}
+
+	// Читаем существующую историю
+	var history []ConversionRecord
+	data, err := os.ReadFile(historyFile)
+	if err == nil {
+		json.Unmarshal(data, &history)
+	}
+
+	// Добавляем новую запись
+	history = append(history, record)
+
+	// Сохраняем обратно
+	data, err = json.MarshalIndent(history, "", "  ")
+	if err != nil {
+		return
+	}
+
+	os.WriteFile(historyFile, data, 0644)
+}
+
+// showHistory показывает историю конвертаций
+func showHistory() {
+	data, err := os.ReadFile(historyFile)
+	if err != nil {
+		color.Red("❌ История конвертаций пуста или файл не найден")
+		return
+	}
+
+	var history []ConversionRecord
+	err = json.Unmarshal(data, &history)
+	if err != nil {
+		color.Red("❌ Ошибка чтения файла истории: %v", err)
+		return
+	}
+
+	if len(history) == 0 {
+		color.Yellow("📝 История конвертаций пуста")
+		return
+	}
+
+	color.Set(color.FgGreen, color.Bold)
+	fmt.Println("╔════════════════════════════════════════╗")
+	fmt.Println("║      ИСТОРИЯ КОНВЕРТАЦИЙ               ║")
+	fmt.Println("╚════════════════════════════════════════╝")
+	color.Unset()
+	fmt.Println()
+
+	for i := len(history) - 1; i >= 0; i-- {
+		rec := history[i]
+		color.Cyan("📅 %s", rec.Timestamp.Format("2006-01-02 15:04:05"))
+		color.Green("   %.2f %s = %.2f %s", rec.Amount, rec.FromCurrency, rec.Result, rec.ToCurrency)
+		color.HiBlack("   Курс: 1 %s = %.4f %s", rec.FromCurrency, rec.ExchangeRate, rec.ToCurrency)
+		fmt.Println()
+	}
+
+	color.Set(color.FgYellow, color.Bold)
+	fmt.Printf("Всего записей: %d\n", len(history))
 	color.Unset()
 }
