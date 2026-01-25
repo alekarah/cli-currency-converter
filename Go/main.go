@@ -57,18 +57,23 @@ func main() {
 		return
 	}
 
-	// Проверяем флаг --json
+	// Проверяем флаги --json и --csv
 	jsonOutput := false
+	csvOutput := false
 	args := os.Args[1:]
-	for i, arg := range args {
-		if arg == "--json" {
+	for i := 0; i < len(args); i++ {
+		if args[i] == "--json" {
 			jsonOutput = true
 			args = append(args[:i], args[i+1:]...)
-			break
+			i--
+		} else if args[i] == "--csv" {
+			csvOutput = true
+			args = append(args[:i], args[i+1:]...)
+			i--
 		}
 	}
 
-	if !jsonOutput {
+	if !jsonOutput && !csvOutput {
 		printHeader()
 	}
 
@@ -83,8 +88,8 @@ func main() {
 		var err error
 		amount, err = strconv.ParseFloat(args[2], 64)
 		if err != nil {
-			if jsonOutput {
-				outputError("неверная сумма")
+			if jsonOutput || csvOutput {
+				outputError("неверная сумма", jsonOutput)
 			} else {
 				color.Red("❌ Ошибка: неверная сумма")
 			}
@@ -96,23 +101,23 @@ func main() {
 		toCurrency = getInput("Введите целевую валюту (например, RUB): ")
 		amount = getAmount("Введите сумму для конвертации: ")
 	} else {
-		if jsonOutput {
-			outputError("неверное количество аргументов")
+		if jsonOutput || csvOutput {
+			outputError("неверное количество аргументов", jsonOutput)
 		} else {
-			color.Red("❌ Использование: %s [--json] <from> <to> <amount>", os.Args[0])
+			color.Red("❌ Использование: %s [--json|--csv] <from> <to> <amount>", os.Args[0])
 			color.Red("   или: %s --history", os.Args[0])
 		}
 		os.Exit(1)
 	}
 
 	// Получаем курсы валют
-	if !jsonOutput {
+	if !jsonOutput && !csvOutput {
 		color.Cyan("🔄 Загрузка актуальных курсов валют...")
 	}
 	rates, err := getExchangeRates(fromCurrency)
 	if err != nil {
-		if jsonOutput {
-			outputError(fmt.Sprintf("ошибка при получении курсов: %v", err))
+		if jsonOutput || csvOutput {
+			outputError(fmt.Sprintf("ошибка при получении курсов: %v", err), jsonOutput)
 		} else {
 			color.Red("❌ Ошибка при получении курсов: %v", err)
 		}
@@ -122,8 +127,8 @@ func main() {
 	// Выполняем конвертацию
 	result, err := convertCurrency(amount, fromCurrency, toCurrency, rates)
 	if err != nil {
-		if jsonOutput {
-			outputError(fmt.Sprintf("ошибка конвертации: %v", err))
+		if jsonOutput || csvOutput {
+			outputError(fmt.Sprintf("ошибка конвертации: %v", err), jsonOutput)
 		} else {
 			color.Red("❌ Ошибка конвертации: %v", err)
 		}
@@ -138,6 +143,8 @@ func main() {
 	// Выводим результат
 	if jsonOutput {
 		outputJSON(fromCurrency, toCurrency, amount, result, rate, updateTime)
+	} else if csvOutput {
+		outputCSV(fromCurrency, toCurrency, amount, result, rate, updateTime)
 	} else {
 		printResult(amount, fromCurrency, result, toCurrency, rates)
 	}
@@ -289,21 +296,39 @@ func outputJSON(from, to string, amount, result, rate float64, updateTime time.T
 
 	data, err := json.MarshalIndent(output, "", "  ")
 	if err != nil {
-		outputError(fmt.Sprintf("ошибка формирования JSON: %v", err))
+		outputError(fmt.Sprintf("ошибка формирования JSON: %v", err), true)
 		os.Exit(1)
 	}
 
 	fmt.Println(string(data))
 }
 
-// outputError выводит ошибку в формате JSON
-func outputError(message string) {
-	output := map[string]interface{}{
-		"success": false,
-		"error":   message,
+// outputCSV выводит результат в формате CSV
+func outputCSV(from, to string, amount, result, rate float64, updateTime time.Time) {
+	// timestamp,from,to,amount,result,rate
+	fmt.Printf("%s,%s,%s,%.2f,%.2f,%.6f\n",
+		time.Now().Format(time.RFC3339),
+		from,
+		to,
+		amount,
+		result,
+		rate,
+	)
+}
+
+// outputError выводит ошибку в формате JSON или CSV
+func outputError(message string, asJSON bool) {
+	if asJSON {
+		output := map[string]interface{}{
+			"success": false,
+			"error":   message,
+		}
+		data, _ := json.MarshalIndent(output, "", "  ")
+		fmt.Println(string(data))
+	} else {
+		// CSV формат ошибки
+		fmt.Printf("error,%s\n", message)
 	}
-	data, _ := json.MarshalIndent(output, "", "  ")
-	fmt.Println(string(data))
 }
 
 // getHistoryPath возвращает путь к файлу истории

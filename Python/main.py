@@ -148,13 +148,23 @@ def output_json(from_currency, to_currency, amount, result, rate, update_time):
     print(json.dumps(output, indent=2, ensure_ascii=False))
 
 
-def output_error(message):
-    """Выводит ошибку в формате JSON"""
-    output = {
-        "success": False,
-        "error": message
-    }
-    print(json.dumps(output, indent=2, ensure_ascii=False))
+def output_csv(from_currency, to_currency, amount, result, rate):
+    """Выводит результат в формате CSV"""
+    # timestamp,from,to,amount,result,rate
+    print(f"{datetime.now().isoformat()},{from_currency},{to_currency},{amount:.2f},{result:.2f},{rate:.6f}")
+
+
+def output_error(message, as_json=True):
+    """Выводит ошибку в формате JSON или CSV"""
+    if as_json:
+        output = {
+            "success": False,
+            "error": message
+        }
+        print(json.dumps(output, indent=2, ensure_ascii=False))
+    else:
+        # CSV формат ошибки
+        print(f"error,{message}")
 
 
 def save_to_history(from_currency, to_currency, amount, result, rate, update_time):
@@ -228,14 +238,18 @@ def main():
         show_history()
         return
 
-    # Проверяем флаг --json
+    # Проверяем флаги --json и --csv
     json_output = False
+    csv_output = False
     args = sys.argv[1:]
     if "--json" in args:
         json_output = True
         args.remove("--json")
+    if "--csv" in args:
+        csv_output = True
+        args.remove("--csv")
 
-    if not json_output:
+    if not json_output and not csv_output:
         print_header()
 
     # Получаем параметры из командной строки или интерактивно
@@ -246,14 +260,14 @@ def main():
         try:
             amount = float(args[2])
             if amount <= 0:
-                if json_output:
-                    output_error("сумма должна быть положительной")
+                if json_output or csv_output:
+                    output_error("сумма должна быть положительной", json_output)
                 else:
                     print(Fore.RED + "❌ Сумма должна быть положительной!")
                 sys.exit(1)
         except ValueError:
-            if json_output:
-                output_error("неверная сумма")
+            if json_output or csv_output:
+                output_error("неверная сумма", json_output)
             else:
                 print(Fore.RED + "❌ Ошибка: неверная сумма")
             sys.exit(1)
@@ -263,27 +277,27 @@ def main():
         to_currency = get_input("Введите целевую валюту (например, RUB): ")
         amount = get_amount("Введите сумму для конвертации: ")
     else:
-        if json_output:
-            output_error("неверное количество аргументов")
+        if json_output or csv_output:
+            output_error("неверное количество аргументов", json_output)
         else:
-            print(Fore.RED + f"❌ Использование: {sys.argv[0]} [--json] <from> <to> <amount>")
+            print(Fore.RED + f"❌ Использование: {sys.argv[0]} [--json|--csv] <from> <to> <amount>")
             print(Fore.RED + f"   или: {sys.argv[0]} --history")
         sys.exit(1)
 
     # Получаем курсы валют
     try:
-        rates_data = get_exchange_rates(from_currency, silent=json_output)
+        rates_data = get_exchange_rates(from_currency, silent=(json_output or csv_output))
     except SystemExit:
-        if json_output:
-            output_error("ошибка при получении курсов")
+        if json_output or csv_output:
+            output_error("ошибка при получении курсов", json_output)
         raise
 
     # Выполняем конвертацию
     try:
         result, rate = convert_currency(amount, from_currency, to_currency, rates_data)
     except SystemExit:
-        if json_output:
-            output_error("ошибка конвертации")
+        if json_output or csv_output:
+            output_error("ошибка конвертации", json_output)
         raise
 
     # Сохраняем в историю
@@ -294,6 +308,8 @@ def main():
     # Выводим результат
     if json_output:
         output_json(from_currency, to_currency, amount, result, rate, update_time)
+    elif csv_output:
+        output_csv(from_currency, to_currency, amount, result, rate)
     else:
         print_result(amount, from_currency, result, to_currency, rate, rates_data)
 

@@ -177,7 +177,8 @@ Python/
 - `save_to_history()` - сохранение конвертации в историю
 - `show_history()` - отображение истории конвертаций
 - `output_json()` - вывод результата в JSON формате
-- `output_error()` - вывод ошибок в JSON формате
+- `output_csv()` - вывод результата в CSV формате
+- `output_error()` - вывод ошибок в JSON/CSV формате
 
 ## Новые возможности
 
@@ -234,18 +235,20 @@ python main.py --json USD RUB 100
 }
 ```
 
-Использование в bash-скриптах с `jq`:
-```bash
-# Получить только результат конвертации
-result=$(python main.py --json USD RUB 100 | jq -r '.result')
-echo "Результат: $result RUB"
+### CSV вывод
 
-# Проверить успешность операции
-success=$(python main.py --json USD RUB 100 | jq -r '.success')
-if [ "$success" = "true" ]; then
-  echo "Конвертация успешна"
-fi
+Для экспорта данных используйте флаг `--csv`:
+
+```bash
+python main.py --csv USD RUB 100
 ```
+
+Пример вывода:
+```
+2026-01-25T19:06:30.126197,USD,EUR,50.00,42.45,0.849000
+```
+
+Формат: `timestamp,from,to,amount,result,rate`
 
 ## Отладка и разработка
 
