@@ -179,6 +179,7 @@ Python/
 - `output_json()` - вывод результата в JSON формате
 - `output_csv()` - вывод результата в CSV формате
 - `output_error()` - вывод ошибок в JSON/CSV формате
+- `load_config()` - загрузка конфигурации из config.json
 
 ## Новые возможности
 
@@ -249,6 +250,23 @@ python main.py --csv USD RUB 100
 ```
 
 Формат: `timestamp,from,to,amount,result,rate`
+
+### Конфигурационный файл
+
+Создайте `config.json` в директории программы (или скопируйте `config.json.example` из корня проекта):
+
+```json
+{
+  "default_from": "USD",
+  "default_to": "RUB",
+  "output_format": "text"
+}
+```
+
+**Параметры:**
+- `default_from` — валюта по умолчанию (подставляется в интерактивном режиме, Enter для подтверждения)
+- `default_to` — целевая валюта по умолчанию
+- `output_format` — формат вывода: `"text"`, `"json"` или `"csv"` (перебивается флагами `--json`/`--csv`)
 
 ## Отладка и разработка
 

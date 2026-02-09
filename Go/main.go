@@ -6,7 +6,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -45,10 +44,38 @@ type JSONOutput struct {
 	RateUpdateTime time.Time `json:"rate_update_time"`
 }
 
+// Config структура конфигурационного файла
+type Config struct {
+	DefaultFrom  string `json:"default_from"`
+	DefaultTo    string `json:"default_to"`
+	OutputFormat string `json:"output_format"`
+}
+
 const (
 	apiURL      = "https://api.exchangerate-api.com/v4/latest/"
 	historyFile = "history.json"
+	configFile  = "config.json"
 )
+
+// loadConfig загружает конфигурацию из config.json
+func loadConfig() Config {
+	cfg := Config{
+		DefaultFrom:  "USD",
+		DefaultTo:    "RUB",
+		OutputFormat: "text",
+	}
+
+	data, err := os.ReadFile(configFile)
+	if err != nil {
+		return cfg
+	}
+
+	json.Unmarshal(data, &cfg)
+	cfg.DefaultFrom = strings.ToUpper(cfg.DefaultFrom)
+	cfg.DefaultTo = strings.ToUpper(cfg.DefaultTo)
+	cfg.OutputFormat = strings.ToLower(cfg.OutputFormat)
+	return cfg
+}
 
 func main() {
 	// Проверяем флаг --history
@@ -56,6 +83,9 @@ func main() {
 		showHistory()
 		return
 	}
+
+	// Загружаем конфигурацию
+	cfg := loadConfig()
 
 	// Проверяем флаги --json и --csv
 	jsonOutput := false
@@ -70,6 +100,16 @@ func main() {
 			csvOutput = true
 			args = append(args[:i], args[i+1:]...)
 			i--
+		}
+	}
+
+	// Применяем формат вывода из конфига, если нет флагов
+	if !jsonOutput && !csvOutput {
+		switch cfg.OutputFormat {
+		case "json":
+			jsonOutput = true
+		case "csv":
+			csvOutput = true
 		}
 	}
 
@@ -96,9 +136,15 @@ func main() {
 			os.Exit(1)
 		}
 	} else if len(args) == 0 {
-		// Интерактивный режим
-		fromCurrency = getInput("Введите исходную валюту (например, USD): ")
-		toCurrency = getInput("Введите целевую валюту (например, RUB): ")
+		// Интерактивный режим с подсказками из конфига
+		fromCurrency = getInput(fmt.Sprintf("Введите исходную валюту (по умолчанию %s): ", cfg.DefaultFrom))
+		if fromCurrency == "" {
+			fromCurrency = cfg.DefaultFrom
+		}
+		toCurrency = getInput(fmt.Sprintf("Введите целевую валюту (по умолчанию %s): ", cfg.DefaultTo))
+		if toCurrency == "" {
+			toCurrency = cfg.DefaultTo
+		}
 		amount = getAmount("Введите сумму для конвертации: ")
 	} else {
 		if jsonOutput || csvOutput {
@@ -304,7 +350,7 @@ func outputJSON(from, to string, amount, result, rate float64, updateTime time.T
 }
 
 // outputCSV выводит результат в формате CSV
-func outputCSV(from, to string, amount, result, rate float64, updateTime time.Time) {
+func outputCSV(from, to string, amount, result, rate float64, _ time.Time) {
 	// timestamp,from,to,amount,result,rate
 	fmt.Printf("%s,%s,%s,%.2f,%.2f,%.6f\n",
 		time.Now().Format(time.RFC3339),
@@ -329,15 +375,6 @@ func outputError(message string, asJSON bool) {
 		// CSV формат ошибки
 		fmt.Printf("error,%s\n", message)
 	}
-}
-
-// getHistoryPath возвращает путь к файлу истории
-func getHistoryPath() string {
-	execPath, err := os.Executable()
-	if err != nil {
-		return historyFile
-	}
-	return filepath.Join(filepath.Dir(execPath), historyFile)
 }
 
 // saveToHistory сохраняет запись в историю конвертаций

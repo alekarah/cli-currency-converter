@@ -1,0 +1,5 @@
+{
+  "default_from": "USD",
+  "default_to": "RUB",
+  "output_format": "text"
+}

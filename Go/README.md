@@ -190,6 +190,7 @@ Go/
 - `outputJSON()` - вывод результата в JSON формате
 - `outputCSV()` - вывод результата в CSV формате
 - `outputError()` - вывод ошибок в JSON/CSV формате
+- `loadConfig()` - загрузка конфигурации из config.json
 
 ## Новые возможности
 
@@ -260,3 +261,20 @@ go run main.go --csv USD RUB 100
 ```
 
 Формат: `timestamp,from,to,amount,result,rate`
+
+### Конфигурационный файл
+
+Создайте `config.json` в директории программы (или скопируйте `config.json.example` из корня проекта):
+
+```json
+{
+  "default_from": "USD",
+  "default_to": "RUB",
+  "output_format": "text"
+}
+```
+
+**Параметры:**
+- `default_from` — валюта по умолчанию (подставляется в интерактивном режиме, Enter для подтверждения)
+- `default_to` — целевая валюта по умолчанию
+- `output_format` — формат вывода: `"text"`, `"json"` или `"csv"` (перебивается флагами `--json`/`--csv`)

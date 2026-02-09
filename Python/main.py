@@ -17,6 +17,26 @@ init(autoreset=True)
 
 API_URL = "https://api.exchangerate-api.com/v4/latest/"
 HISTORY_FILE = "history.json"
+CONFIG_FILE = "config.json"
+
+
+def load_config():
+    """Загружает конфигурацию из config.json"""
+    config = {
+        "default_from": "USD",
+        "default_to": "RUB",
+        "output_format": "text"
+    }
+    try:
+        with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
+            user_config = json.load(f)
+            config.update(user_config)
+    except (FileNotFoundError, json.JSONDecodeError):
+        pass
+    config["default_from"] = config["default_from"].upper()
+    config["default_to"] = config["default_to"].upper()
+    config["output_format"] = config["output_format"].lower()
+    return config
 
 
 def print_header():
@@ -238,6 +258,9 @@ def main():
         show_history()
         return
 
+    # Загружаем конфигурацию
+    cfg = load_config()
+
     # Проверяем флаги --json и --csv
     json_output = False
     csv_output = False
@@ -248,6 +271,13 @@ def main():
     if "--csv" in args:
         csv_output = True
         args.remove("--csv")
+
+    # Применяем формат вывода из конфига, если нет флагов
+    if not json_output and not csv_output:
+        if cfg["output_format"] == "json":
+            json_output = True
+        elif cfg["output_format"] == "csv":
+            csv_output = True
 
     if not json_output and not csv_output:
         print_header()
@@ -272,9 +302,13 @@ def main():
                 print(Fore.RED + "❌ Ошибка: неверная сумма")
             sys.exit(1)
     elif len(args) == 0:
-        # Интерактивный режим
-        from_currency = get_input("Введите исходную валюту (например, USD): ")
-        to_currency = get_input("Введите целевую валюту (например, RUB): ")
+        # Интерактивный режим с подсказками из конфига
+        from_currency = get_input(f"Введите исходную валюту (по умолчанию {cfg['default_from']}): ")
+        if not from_currency:
+            from_currency = cfg["default_from"]
+        to_currency = get_input(f"Введите целевую валюту (по умолчанию {cfg['default_to']}): ")
+        if not to_currency:
+            to_currency = cfg["default_to"]
         amount = get_amount("Введите сумму для конвертации: ")
     else:
         if json_output or csv_output:
