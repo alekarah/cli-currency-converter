@@ -286,7 +286,7 @@ def main():
     if len(args) == 3:
         # Режим с аргументами командной строки
         from_currency = args[0].upper()
-        to_currency = args[1].upper()
+        to_currency_raw = args[1].upper()
         try:
             amount = float(args[2])
             if amount <= 0:
@@ -306,17 +306,20 @@ def main():
         from_currency = get_input(f"Введите исходную валюту (по умолчанию {cfg['default_from']}): ")
         if not from_currency:
             from_currency = cfg["default_from"]
-        to_currency = get_input(f"Введите целевую валюту (по умолчанию {cfg['default_to']}): ")
-        if not to_currency:
-            to_currency = cfg["default_to"]
+        to_currency_raw = get_input(f"Введите целевую валюту (по умолчанию {cfg['default_to']}): ")
+        if not to_currency_raw:
+            to_currency_raw = cfg["default_to"]
         amount = get_amount("Введите сумму для конвертации: ")
     else:
         if json_output or csv_output:
             output_error("неверное количество аргументов", json_output)
         else:
-            print(Fore.RED + f"❌ Использование: {sys.argv[0]} [--json|--csv] <from> <to> <amount>")
+            print(Fore.RED + f"❌ Использование: {sys.argv[0]} [--json|--csv] <from> <to1[,to2,...]> <amount>")
             print(Fore.RED + f"   или: {sys.argv[0]} --history")
         sys.exit(1)
+
+    # Разбиваем целевые валюты (поддержка USD RUB,EUR,CNY 100)
+    to_currencies = [c.strip() for c in to_currency_raw.split(",") if c.strip()]
 
     # Получаем курсы валют
     try:
@@ -326,26 +329,28 @@ def main():
             output_error("ошибка при получении курсов", json_output)
         raise
 
-    # Выполняем конвертацию
-    try:
-        result, rate = convert_currency(amount, from_currency, to_currency, rates_data)
-    except SystemExit:
-        if json_output or csv_output:
-            output_error("ошибка конвертации", json_output)
-        raise
-
-    # Сохраняем в историю
     timestamp = rates_data.get('time_last_updated', 0)
     update_time = datetime.fromtimestamp(timestamp) if timestamp else datetime.now()
-    save_to_history(from_currency, to_currency, amount, result, rate, update_time)
 
-    # Выводим результат
-    if json_output:
-        output_json(from_currency, to_currency, amount, result, rate, update_time)
-    elif csv_output:
-        output_csv(from_currency, to_currency, amount, result, rate)
-    else:
-        print_result(amount, from_currency, result, to_currency, rate, rates_data)
+    # Выполняем конвертацию для каждой валюты
+    for to_currency in to_currencies:
+        try:
+            result, rate = convert_currency(amount, from_currency, to_currency, rates_data)
+        except SystemExit:
+            if json_output or csv_output:
+                output_error(f"ошибка конвертации для {to_currency}", json_output)
+            else:
+                print(Fore.RED + f"❌ Ошибка конвертации для {to_currency}")
+            continue
+
+        save_to_history(from_currency, to_currency, amount, result, rate, update_time)
+
+        if json_output:
+            output_json(from_currency, to_currency, amount, result, rate, update_time)
+        elif csv_output:
+            output_csv(from_currency, to_currency, amount, result, rate)
+        else:
+            print_result(amount, from_currency, result, to_currency, rate, rates_data)
 
 
 if __name__ == "__main__":

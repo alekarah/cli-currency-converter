@@ -118,13 +118,13 @@ func main() {
 	}
 
 	// Получаем параметры из командной строки или интерактивно
-	var fromCurrency, toCurrency string
+	var fromCurrency, toCurrencyRaw string
 	var amount float64
 
 	if len(args) == 3 {
 		// Режим с аргументами командной строки
 		fromCurrency = strings.ToUpper(args[0])
-		toCurrency = strings.ToUpper(args[1])
+		toCurrencyRaw = strings.ToUpper(args[1])
 		var err error
 		amount, err = strconv.ParseFloat(args[2], 64)
 		if err != nil {
@@ -141,20 +141,23 @@ func main() {
 		if fromCurrency == "" {
 			fromCurrency = cfg.DefaultFrom
 		}
-		toCurrency = getInput(fmt.Sprintf("Введите целевую валюту (по умолчанию %s): ", cfg.DefaultTo))
-		if toCurrency == "" {
-			toCurrency = cfg.DefaultTo
+		toCurrencyRaw = getInput(fmt.Sprintf("Введите целевую валюту (по умолчанию %s): ", cfg.DefaultTo))
+		if toCurrencyRaw == "" {
+			toCurrencyRaw = cfg.DefaultTo
 		}
 		amount = getAmount("Введите сумму для конвертации: ")
 	} else {
 		if jsonOutput || csvOutput {
 			outputError("неверное количество аргументов", jsonOutput)
 		} else {
-			color.Red("❌ Использование: %s [--json|--csv] <from> <to> <amount>", os.Args[0])
+			color.Red("❌ Использование: %s [--json|--csv] <from> <to1[,to2,...]> <amount>", os.Args[0])
 			color.Red("   или: %s --history", os.Args[0])
 		}
 		os.Exit(1)
 	}
+
+	// Разбиваем целевые валюты (поддержка USD RUB,EUR,CNY 100)
+	toCurrencies := strings.Split(toCurrencyRaw, ",")
 
 	// Получаем курсы валют
 	if !jsonOutput && !csvOutput {
@@ -170,29 +173,35 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Выполняем конвертацию
-	result, err := convertCurrency(amount, fromCurrency, toCurrency, rates)
-	if err != nil {
-		if jsonOutput || csvOutput {
-			outputError(fmt.Sprintf("ошибка конвертации: %v", err), jsonOutput)
-		} else {
-			color.Red("❌ Ошибка конвертации: %v", err)
-		}
-		os.Exit(1)
-	}
-
-	// Сохраняем в историю
-	rate := rates.Rates[toCurrency]
 	updateTime := time.Unix(rates.TimeLastUpdated, 0)
-	saveToHistory(fromCurrency, toCurrency, amount, result, rate, updateTime)
 
-	// Выводим результат
-	if jsonOutput {
-		outputJSON(fromCurrency, toCurrency, amount, result, rate, updateTime)
-	} else if csvOutput {
-		outputCSV(fromCurrency, toCurrency, amount, result, rate, updateTime)
-	} else {
-		printResult(amount, fromCurrency, result, toCurrency, rates)
+	// Выполняем конвертацию для каждой валюты
+	for _, toCurrency := range toCurrencies {
+		toCurrency = strings.TrimSpace(toCurrency)
+		if toCurrency == "" {
+			continue
+		}
+
+		result, err := convertCurrency(amount, fromCurrency, toCurrency, rates)
+		if err != nil {
+			if jsonOutput || csvOutput {
+				outputError(fmt.Sprintf("ошибка конвертации: %v", err), jsonOutput)
+			} else {
+				color.Red("❌ Ошибка конвертации для %s: %v", toCurrency, err)
+			}
+			continue
+		}
+
+		rate := rates.Rates[toCurrency]
+		saveToHistory(fromCurrency, toCurrency, amount, result, rate, updateTime)
+
+		if jsonOutput {
+			outputJSON(fromCurrency, toCurrency, amount, result, rate, updateTime)
+		} else if csvOutput {
+			outputCSV(fromCurrency, toCurrency, amount, result, rate, updateTime)
+		} else {
+			printResult(amount, fromCurrency, result, toCurrency, rates)
+		}
 	}
 }
 

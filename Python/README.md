@@ -251,6 +251,14 @@ python main.py --csv USD RUB 100
 
 Формат: `timestamp,from,to,amount,result,rate`
 
+### Множественная конвертация
+
+Передайте несколько целевых валют через запятую — один запрос к API:
+
+```bash
+python main.py USD RUB,EUR,CNY 100
+```
+
 ### Конфигурационный файл
 
 Создайте `config.json` в директории программы (или скопируйте `config.json.example` из корня проекта):
