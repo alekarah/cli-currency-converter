@@ -18,6 +18,8 @@ init(autoreset=True)
 API_URL = "https://api.exchangerate-api.com/v4/latest/"
 HISTORY_FILE = "history.json"
 CONFIG_FILE = "config.json"
+CACHE_FILE = "cache.json"
+CACHE_TTL = 60  # минут
 
 
 def load_config():
@@ -65,14 +67,43 @@ def get_amount(prompt):
             print(Fore.RED + "❌ Ошибка: введите корректное число!")
 
 
+def load_cache():
+    """Загружает кэш курсов из файла"""
+    try:
+        with open(CACHE_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+
+def save_cache(cache):
+    """Сохраняет кэш курсов в файл"""
+    try:
+        with open(CACHE_FILE, 'w', encoding='utf-8') as f:
+            json.dump(cache, f, indent=2, ensure_ascii=False)
+    except Exception:
+        pass
+
+
 def get_exchange_rates(base_currency, silent=False):
-    """Получает курсы валют из API"""
+    """Получает курсы валют из кэша или API"""
+    cache = load_cache()
+    if base_currency in cache:
+        entry = cache[base_currency]
+        fetched_at = datetime.fromisoformat(entry["fetched_at"])
+        age_minutes = (datetime.now() - fetched_at).total_seconds() / 60
+        if age_minutes < CACHE_TTL:
+            if not silent:
+                remaining = int(CACHE_TTL - age_minutes)
+                print(Fore.LIGHTBLACK_EX + f"💾 Используются кэшированные курсы (обновление через {remaining} мин.)")
+            return entry["data"]
+
     try:
         if not silent:
             print(Fore.CYAN + "🔄 Загрузка актуальных курсов валют...")
         response = requests.get(f"{API_URL}{base_currency}", timeout=10)
         response.raise_for_status()
-        return response.json()
+        data = response.json()
     except requests.exceptions.RequestException as e:
         if not silent:
             print(Fore.RED + f"❌ Ошибка при получении курсов: {e}")
@@ -81,6 +112,11 @@ def get_exchange_rates(base_currency, silent=False):
         if not silent:
             print(Fore.RED + f"❌ Ошибка парсинга ответа API: {e}")
         sys.exit(1)
+
+    # Сохраняем в кэш
+    cache[base_currency] = {"fetched_at": datetime.now().isoformat(), "data": data}
+    save_cache(cache)
+    return data
 
 
 def format_time_ago(time_diff):

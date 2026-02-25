@@ -51,10 +51,18 @@ type Config struct {
 	OutputFormat string `json:"output_format"`
 }
 
+// CacheEntry кэш курсов для одной базовой валюты
+type CacheEntry struct {
+	FetchedAt time.Time          `json:"fetched_at"`
+	Data      ExchangeRateResponse `json:"data"`
+}
+
 const (
 	apiURL      = "https://api.exchangerate-api.com/v4/latest/"
 	historyFile = "history.json"
 	configFile  = "config.json"
+	cacheFile   = "cache.json"
+	cacheTTL    = 60 * time.Minute
 )
 
 // loadConfig загружает конфигурацию из config.json
@@ -163,7 +171,7 @@ func main() {
 	if !jsonOutput && !csvOutput {
 		color.Cyan("🔄 Загрузка актуальных курсов валют...")
 	}
-	rates, err := getExchangeRates(fromCurrency)
+	rates, err := getExchangeRates(fromCurrency, jsonOutput || csvOutput)
 	if err != nil {
 		if jsonOutput || csvOutput {
 			outputError(fmt.Sprintf("ошибка при получении курсов: %v", err), jsonOutput)
@@ -236,8 +244,39 @@ func getAmount(prompt string) float64 {
 	return amount
 }
 
-// getExchangeRates получает курсы валют из API
-func getExchangeRates(baseCurrency string) (*ExchangeRateResponse, error) {
+// loadCache загружает кэш курсов из файла
+func loadCache() map[string]CacheEntry {
+	cache := make(map[string]CacheEntry)
+	data, err := os.ReadFile(cacheFile)
+	if err != nil {
+		return cache
+	}
+	json.Unmarshal(data, &cache)
+	return cache
+}
+
+// saveCache сохраняет кэш курсов в файл
+func saveCache(cache map[string]CacheEntry) {
+	data, err := json.MarshalIndent(cache, "", "  ")
+	if err != nil {
+		return
+	}
+	os.WriteFile(cacheFile, data, 0644)
+}
+
+// getExchangeRates получает курсы валют из кэша или API
+func getExchangeRates(baseCurrency string, silent bool) (*ExchangeRateResponse, error) {
+	cache := loadCache()
+	if entry, ok := cache[baseCurrency]; ok {
+		if time.Since(entry.FetchedAt) < cacheTTL {
+			if !silent {
+				color.HiBlack("💾 Используются кэшированные курсы (обновление через %d мин.)",
+					int(cacheTTL.Minutes())-int(time.Since(entry.FetchedAt).Minutes()))
+			}
+			return &entry.Data, nil
+		}
+	}
+
 	client := &http.Client{
 		Timeout: 10 * time.Second,
 	}
@@ -262,6 +301,10 @@ func getExchangeRates(baseCurrency string) (*ExchangeRateResponse, error) {
 	if err != nil {
 		return nil, fmt.Errorf("ошибка парсинга JSON: %w", err)
 	}
+
+	// Сохраняем в кэш
+	cache[baseCurrency] = CacheEntry{FetchedAt: time.Now(), Data: rates}
+	saveCache(cache)
 
 	return &rates, nil
 }
