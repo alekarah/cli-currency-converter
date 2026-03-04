@@ -51,6 +51,13 @@ type Config struct {
 	OutputFormat string `json:"output_format"`
 }
 
+// TableRow строка таблицы результатов конвертации
+type TableRow struct {
+	Currency string
+	Result   float64
+	Rate     float64
+}
+
 // CacheEntry кэш курсов для одной базовой валюты
 type CacheEntry struct {
 	FetchedAt time.Time          `json:"fetched_at"`
@@ -98,6 +105,7 @@ func main() {
 	// Проверяем флаги --json и --csv
 	jsonOutput := false
 	csvOutput := false
+	tableOutput := false
 	args := os.Args[1:]
 	for i := 0; i < len(args); i++ {
 		if args[i] == "--json" {
@@ -108,16 +116,22 @@ func main() {
 			csvOutput = true
 			args = append(args[:i], args[i+1:]...)
 			i--
+		} else if args[i] == "--table" {
+			tableOutput = true
+			args = append(args[:i], args[i+1:]...)
+			i--
 		}
 	}
 
 	// Применяем формат вывода из конфига, если нет флагов
-	if !jsonOutput && !csvOutput {
+	if !jsonOutput && !csvOutput && !tableOutput {
 		switch cfg.OutputFormat {
 		case "json":
 			jsonOutput = true
 		case "csv":
 			csvOutput = true
+		case "table":
+			tableOutput = true
 		}
 	}
 
@@ -182,6 +196,27 @@ func main() {
 	}
 
 	updateTime := time.Unix(rates.TimeLastUpdated, 0)
+
+	// Для табличного режима собираем все результаты, затем выводим таблицу
+	if tableOutput {
+		var rows []TableRow
+		for _, toCurrency := range toCurrencies {
+			toCurrency = strings.TrimSpace(toCurrency)
+			if toCurrency == "" {
+				continue
+			}
+			result, err := convertCurrency(amount, fromCurrency, toCurrency, rates)
+			if err != nil {
+				color.Red("❌ Ошибка конвертации для %s: %v", toCurrency, err)
+				continue
+			}
+			rate := rates.Rates[toCurrency]
+			saveToHistory(fromCurrency, toCurrency, amount, result, rate, updateTime)
+			rows = append(rows, TableRow{toCurrency, result, rate})
+		}
+		printTable(amount, fromCurrency, rows, rates)
+		return
+	}
 
 	// Выполняем конвертацию для каждой валюты
 	for _, toCurrency := range toCurrencies {
@@ -351,6 +386,29 @@ func formatTimeAgo(duration time.Duration) string {
 	}
 
 	return "только что"
+}
+
+// printTable выводит результаты конвертации в виде таблицы
+func printTable(amount float64, from string, rows []TableRow, rates *ExchangeRateResponse) {
+	fmt.Println()
+	color.Set(color.FgYellow, color.Bold)
+	fmt.Printf("  Конвертация %.2f %s\n", amount, from)
+	fmt.Println("  ┌──────────┬────────────────┬──────────────┐")
+	fmt.Println("  │ Валюта   │ Результат      │ Курс         │")
+	fmt.Println("  ├──────────┼────────────────┼──────────────┤")
+	color.Unset()
+	for _, row := range rows {
+		color.Green("  │ %-8s │ %-14.2f │ %-12.4f │", row.Currency, row.Result, row.Rate)
+	}
+	color.Set(color.FgYellow, color.Bold)
+	fmt.Println("  └──────────┴────────────────┴──────────────┘")
+	color.Unset()
+
+	updateTime := time.Unix(rates.TimeLastUpdated, 0)
+	timeAgo := formatTimeAgo(time.Since(updateTime))
+	fmt.Println()
+	color.HiBlack("  Последнее обновление: %s (%s)", updateTime.Format("2006-01-02 15:04:05"), timeAgo)
+	fmt.Println()
 }
 
 // printResult выводит результат конвертации

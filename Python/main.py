@@ -287,6 +287,27 @@ def show_history():
     print(Fore.YELLOW + Style.BRIGHT + f"Всего записей: {len(history)}")
 
 
+def print_table(amount, from_currency, rows, rates_data):
+    """Выводит результаты конвертации в виде таблицы"""
+    print()
+    print(Fore.YELLOW + Style.BRIGHT + f"  Конвертация {amount:.2f} {from_currency}")
+    print(Fore.YELLOW + Style.BRIGHT + "  ┌──────────┬────────────────┬──────────────┐")
+    print(Fore.YELLOW + Style.BRIGHT + "  │ Валюта   │ Результат      │ Курс         │")
+    print(Fore.YELLOW + Style.BRIGHT + "  ├──────────┼────────────────┼──────────────┤")
+    for currency, result, rate in rows:
+        print(Fore.GREEN + f"  │ {currency:<8} │ {result:<14.2f} │ {rate:<12.4f} │")
+    print(Fore.YELLOW + Style.BRIGHT + "  └──────────┴────────────────┴──────────────┘")
+
+    timestamp = rates_data.get('time_last_updated', 0)
+    if timestamp:
+        update_time = datetime.fromtimestamp(timestamp)
+        time_diff = datetime.now() - update_time
+        time_ago = format_time_ago(time_diff)
+        print()
+        print(Fore.LIGHTBLACK_EX + f"  Последнее обновление: {update_time.strftime('%Y-%m-%d %H:%M:%S')} ({time_ago})")
+    print()
+
+
 def main():
     """Главная функция программы"""
     # Проверяем флаг --history
@@ -297,9 +318,10 @@ def main():
     # Загружаем конфигурацию
     cfg = load_config()
 
-    # Проверяем флаги --json и --csv
+    # Проверяем флаги --json, --csv, --table
     json_output = False
     csv_output = False
+    table_output = False
     args = sys.argv[1:]
     if "--json" in args:
         json_output = True
@@ -307,13 +329,18 @@ def main():
     if "--csv" in args:
         csv_output = True
         args.remove("--csv")
+    if "--table" in args:
+        table_output = True
+        args.remove("--table")
 
     # Применяем формат вывода из конфига, если нет флагов
-    if not json_output and not csv_output:
+    if not json_output and not csv_output and not table_output:
         if cfg["output_format"] == "json":
             json_output = True
         elif cfg["output_format"] == "csv":
             csv_output = True
+        elif cfg["output_format"] == "table":
+            table_output = True
 
     if not json_output and not csv_output:
         print_header()
@@ -367,6 +394,20 @@ def main():
 
     timestamp = rates_data.get('time_last_updated', 0)
     update_time = datetime.fromtimestamp(timestamp) if timestamp else datetime.now()
+
+    # Для табличного режима собираем все результаты, затем выводим таблицу
+    if table_output:
+        rows = []
+        for to_currency in to_currencies:
+            try:
+                result, rate = convert_currency(amount, from_currency, to_currency, rates_data)
+            except SystemExit:
+                print(Fore.RED + f"❌ Ошибка конвертации для {to_currency}")
+                continue
+            save_to_history(from_currency, to_currency, amount, result, rate, update_time)
+            rows.append((to_currency, result, rate))
+        print_table(amount, from_currency, rows, rates_data)
+        return
 
     # Выполняем конвертацию для каждой валюты
     for to_currency in to_currencies:
