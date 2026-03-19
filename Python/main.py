@@ -85,18 +85,25 @@ def save_cache(cache):
         pass
 
 
-def get_exchange_rates(base_currency, silent=False):
+def get_exchange_rates(base_currency, silent=False, offline=False):
     """Получает курсы валют из кэша или API"""
     cache = load_cache()
     if base_currency in cache:
         entry = cache[base_currency]
         fetched_at = datetime.fromisoformat(entry["fetched_at"])
         age_minutes = (datetime.now() - fetched_at).total_seconds() / 60
-        if age_minutes < CACHE_TTL:
+        if offline or age_minutes < CACHE_TTL:
             if not silent:
-                remaining = int(CACHE_TTL - age_minutes)
-                print(Fore.LIGHTBLACK_EX + f"💾 Используются кэшированные курсы (обновление через {remaining} мин.)")
+                if offline:
+                    print(Fore.LIGHTBLACK_EX + f"📴 Оффлайн режим: используются сохранённые курсы от {fetched_at.strftime('%Y-%m-%d %H:%M')}")
+                else:
+                    remaining = int(CACHE_TTL - age_minutes)
+                    print(Fore.LIGHTBLACK_EX + f"💾 Используются кэшированные курсы (обновление через {remaining} мин.)")
             return entry["data"]
+
+    if offline:
+        print(Fore.RED + f"❌ Нет сохранённых курсов для {base_currency} — выполните конвертацию онлайн хотя бы раз")
+        sys.exit(1)
 
     try:
         if not silent:
@@ -153,7 +160,7 @@ def format_time_ago(time_diff):
     return "только что"
 
 
-def convert_currency(amount, from_currency, to_currency, rates_data):
+def convert_currency(amount, _, to_currency, rates_data):
     """Конвертирует валюту"""
     rates = rates_data.get('rates', {})
 
@@ -318,20 +325,23 @@ def main():
     # Загружаем конфигурацию
     cfg = load_config()
 
-    # Проверяем флаги --json, --csv, --table
+    # Проверяем флаги --json, --csv, --table, --offline
     json_output = False
     csv_output = False
     table_output = False
+    offline_mode = False
     args = sys.argv[1:]
-    if "--json" in args:
-        json_output = True
-        args.remove("--json")
-    if "--csv" in args:
-        csv_output = True
-        args.remove("--csv")
-    if "--table" in args:
-        table_output = True
-        args.remove("--table")
+    for flag in ("--json", "--csv", "--table", "--offline"):
+        if flag in args:
+            args.remove(flag)
+            if flag == "--json":
+                json_output = True
+            elif flag == "--csv":
+                csv_output = True
+            elif flag == "--table":
+                table_output = True
+            elif flag == "--offline":
+                offline_mode = True
 
     # Применяем формат вывода из конфига, если нет флагов
     if not json_output and not csv_output and not table_output:
@@ -386,7 +396,7 @@ def main():
 
     # Получаем курсы валют
     try:
-        rates_data = get_exchange_rates(from_currency, silent=(json_output or csv_output))
+        rates_data = get_exchange_rates(from_currency, silent=(json_output or csv_output), offline=offline_mode)
     except SystemExit:
         if json_output or csv_output:
             output_error("ошибка при получении курсов", json_output)

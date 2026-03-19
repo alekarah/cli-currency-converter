@@ -102,24 +102,24 @@ func main() {
 	// Загружаем конфигурацию
 	cfg := loadConfig()
 
-	// Проверяем флаги --json и --csv
+	// Проверяем флаги --json, --csv, --table, --offline
 	jsonOutput := false
 	csvOutput := false
 	tableOutput := false
-	args := os.Args[1:]
-	for i := 0; i < len(args); i++ {
-		if args[i] == "--json" {
+	offlineMode := false
+	var args []string
+	for _, arg := range os.Args[1:] {
+		switch arg {
+		case "--json":
 			jsonOutput = true
-			args = append(args[:i], args[i+1:]...)
-			i--
-		} else if args[i] == "--csv" {
+		case "--csv":
 			csvOutput = true
-			args = append(args[:i], args[i+1:]...)
-			i--
-		} else if args[i] == "--table" {
+		case "--table":
 			tableOutput = true
-			args = append(args[:i], args[i+1:]...)
-			i--
+		case "--offline":
+			offlineMode = true
+		default:
+			args = append(args, arg)
 		}
 	}
 
@@ -182,10 +182,10 @@ func main() {
 	toCurrencies := strings.Split(toCurrencyRaw, ",")
 
 	// Получаем курсы валют
-	if !jsonOutput && !csvOutput {
+	if !jsonOutput && !csvOutput && !offlineMode {
 		color.Cyan("🔄 Загрузка актуальных курсов валют...")
 	}
-	rates, err := getExchangeRates(fromCurrency, jsonOutput || csvOutput)
+	rates, err := getExchangeRates(fromCurrency, jsonOutput || csvOutput, offlineMode)
 	if err != nil {
 		if jsonOutput || csvOutput {
 			outputError(fmt.Sprintf("ошибка при получении курсов: %v", err), jsonOutput)
@@ -300,16 +300,25 @@ func saveCache(cache map[string]CacheEntry) {
 }
 
 // getExchangeRates получает курсы валют из кэша или API
-func getExchangeRates(baseCurrency string, silent bool) (*ExchangeRateResponse, error) {
+func getExchangeRates(baseCurrency string, silent bool, offline bool) (*ExchangeRateResponse, error) {
 	cache := loadCache()
 	if entry, ok := cache[baseCurrency]; ok {
-		if time.Since(entry.FetchedAt) < cacheTTL {
+		if offline || time.Since(entry.FetchedAt) < cacheTTL {
 			if !silent {
-				color.HiBlack("💾 Используются кэшированные курсы (обновление через %d мин.)",
-					int(cacheTTL.Minutes())-int(time.Since(entry.FetchedAt).Minutes()))
+				if offline {
+					color.HiBlack("📴 Оффлайн режим: используются сохранённые курсы от %s",
+						entry.FetchedAt.Format("2006-01-02 15:04"))
+				} else {
+					color.HiBlack("💾 Используются кэшированные курсы (обновление через %d мин.)",
+						int(cacheTTL.Minutes())-int(time.Since(entry.FetchedAt).Minutes()))
+				}
 			}
 			return &entry.Data, nil
 		}
+	}
+
+	if offline {
+		return nil, fmt.Errorf("нет сохранённых курсов для %s — выполните конвертацию онлайн хотя бы раз", baseCurrency)
 	}
 
 	client := &http.Client{
@@ -345,7 +354,7 @@ func getExchangeRates(baseCurrency string, silent bool) (*ExchangeRateResponse, 
 }
 
 // convertCurrency конвертирует валюту
-func convertCurrency(amount float64, from, to string, rates *ExchangeRateResponse) (float64, error) {
+func convertCurrency(amount float64, _ string, to string, rates *ExchangeRateResponse) (float64, error) {
 	if rate, ok := rates.Rates[to]; ok {
 		return amount * rate, nil
 	}
@@ -475,7 +484,7 @@ func outputCSV(from, to string, amount, result, rate float64, _ time.Time) {
 // outputError выводит ошибку в формате JSON или CSV
 func outputError(message string, asJSON bool) {
 	if asJSON {
-		output := map[string]interface{}{
+		output := map[string]any{
 			"success": false,
 			"error":   message,
 		}
