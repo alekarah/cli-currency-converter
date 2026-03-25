@@ -41,6 +41,36 @@ def load_config():
     return config
 
 
+def print_help():
+    """Выводит справку по использованию программы"""
+    print(Fore.GREEN + Style.BRIGHT + "╔════════════════════════════════════════╗")
+    print(Fore.GREEN + Style.BRIGHT + "║   КОНВЕРТЕР ВАЛЮТ (Python Version)     ║")
+    print(Fore.GREEN + Style.BRIGHT + "╚════════════════════════════════════════╝")
+    print()
+    print(Fore.YELLOW + Style.BRIGHT + "Использование:")
+    print("  python main.py [флаги] <from> <to> <amount>")
+    print("  python main.py [флаги] <from> <to1,to2,...> <amount>")
+    print()
+    print(Fore.YELLOW + Style.BRIGHT + "Флаги вывода:")
+    print(Fore.CYAN + "  --json       Вывод результата в формате JSON")
+    print(Fore.CYAN + "  --csv        Вывод результата в формате CSV")
+    print(Fore.CYAN + "  --table      Вывод результата в виде таблицы")
+    print()
+    print(Fore.YELLOW + Style.BRIGHT + "Прочие флаги:")
+    print(Fore.CYAN + "  --offline    Использовать сохранённые курсы без запроса к API")
+    print(Fore.CYAN + "  --history          Показать историю всех конвертаций")
+    print(Fore.CYAN + "  --history USD/RUB  Показать историю по конкретной паре")
+    print(Fore.CYAN + "  --help, -h   Показать эту справку")
+    print()
+    print(Fore.YELLOW + Style.BRIGHT + "Примеры:")
+    print("  python main.py USD RUB 100")
+    print("  python main.py --table USD RUB,EUR,CNY 100")
+    print("  python main.py --json USD EUR 50")
+    print("  python main.py --offline USD RUB 100")
+    print("  python main.py --history USD/RUB")
+    print()
+
+
 def print_header():
     """Выводит заголовок программы"""
     print(Fore.GREEN + Style.BRIGHT + "╔════════════════════════════════════════╗")
@@ -360,6 +390,11 @@ def print_table(amount, from_currency, rows, rates_data):
 
 def main():
     """Главная функция программы"""
+    # Проверяем флаг --help
+    if len(sys.argv) > 1 and sys.argv[1] in ("--help", "-h"):
+        print_help()
+        return
+
     # Проверяем флаг --history
     if len(sys.argv) > 1 and sys.argv[1] == "--history":
         filter_pair = sys.argv[2].upper() if len(sys.argv) > 2 else ""

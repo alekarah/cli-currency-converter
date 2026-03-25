@@ -93,6 +93,12 @@ func loadConfig() Config {
 }
 
 func main() {
+	// Проверяем флаг --help
+	if len(os.Args) > 1 && (os.Args[1] == "--help" || os.Args[1] == "-h") {
+		printHelp()
+		return
+	}
+
 	// Проверяем флаг --history
 	if len(os.Args) > 1 && os.Args[1] == "--history" {
 		filter := ""
@@ -250,6 +256,46 @@ func main() {
 			printResult(amount, fromCurrency, result, toCurrency, rates)
 		}
 	}
+}
+
+// printHelp выводит справку по использованию программы
+func printHelp() {
+	color.Set(color.FgGreen, color.Bold)
+	fmt.Println("╔════════════════════════════════════════╗")
+	fmt.Println("║     КОНВЕРТЕР ВАЛЮТ (Go Version)       ║")
+	fmt.Println("╚════════════════════════════════════════╝")
+	color.Unset()
+	fmt.Println()
+	color.Set(color.FgYellow, color.Bold)
+	fmt.Println("Использование:")
+	color.Unset()
+	fmt.Println("  go run main.go [флаги] <from> <to> <amount>")
+	fmt.Println("  go run main.go [флаги] <from> <to1,to2,...> <amount>")
+	fmt.Println()
+	color.Set(color.FgYellow, color.Bold)
+	fmt.Println("Флаги вывода:")
+	color.Unset()
+	color.Cyan("  --json       Вывод результата в формате JSON")
+	color.Cyan("  --csv        Вывод результата в формате CSV")
+	color.Cyan("  --table      Вывод результата в виде таблицы")
+	fmt.Println()
+	color.Set(color.FgYellow, color.Bold)
+	fmt.Println("Прочие флаги:")
+	color.Unset()
+	color.Cyan("  --offline    Использовать сохранённые курсы без запроса к API")
+	color.Cyan("  --history          Показать историю всех конвертаций")
+	color.Cyan("  --history USD/RUB  Показать историю по конкретной паре")
+	color.Cyan("  --help, -h   Показать эту справку")
+	fmt.Println()
+	color.Set(color.FgYellow, color.Bold)
+	fmt.Println("Примеры:")
+	color.Unset()
+	fmt.Println("  go run main.go USD RUB 100")
+	fmt.Println("  go run main.go --table USD RUB,EUR,CNY 100")
+	fmt.Println("  go run main.go --json USD EUR 50")
+	fmt.Println("  go run main.go --offline USD RUB 100")
+	fmt.Println("  go run main.go --history USD/RUB")
+	fmt.Println()
 }
 
 // printHeader выводит заголовок программы
