@@ -262,8 +262,8 @@ def save_to_history(from_currency, to_currency, amount, result, rate, update_tim
         pass
 
 
-def show_history():
-    """Показывает историю конвертаций"""
+def show_history(filter_pair=""):
+    """Показывает историю конвертаций, сгруппированную по валютным парам"""
     if not os.path.exists(HISTORY_FILE):
         print(Fore.RED + "❌ История конвертаций пуста или файл не найден")
         return
@@ -279,19 +279,62 @@ def show_history():
         print(Fore.YELLOW + "📝 История конвертаций пуста")
         return
 
+    # Фильтруем по паре если задан фильтр (например "USD/RUB")
+    if filter_pair:
+        parts = filter_pair.split("/")
+        if len(parts) == 2:
+            history = [r for r in history if r['from_currency'] == parts[0] and r['to_currency'] == parts[1]]
+        else:
+            history = [r for r in history if r['from_currency'] == filter_pair or r['to_currency'] == filter_pair]
+        if not history:
+            print(Fore.YELLOW + f"📝 Записей для {filter_pair} не найдено")
+            return
+
+    # Группируем по паре FROM/TO с сохранением порядка
+    groups = {}
+    order = []
+    for rec in history:
+        key = (rec['from_currency'], rec['to_currency'])
+        if key not in groups:
+            groups[key] = []
+            order.append(key)
+        groups[key].append(rec)
+
     print(Fore.GREEN + Style.BRIGHT + "╔════════════════════════════════════════╗")
     print(Fore.GREEN + Style.BRIGHT + "║      ИСТОРИЯ КОНВЕРТАЦИЙ               ║")
     print(Fore.GREEN + Style.BRIGHT + "╚════════════════════════════════════════╝")
-    print()
 
-    for rec in reversed(history):
-        timestamp = datetime.fromisoformat(rec['timestamp'])
-        print(Fore.CYAN + f"📅 {timestamp.strftime('%Y-%m-%d %H:%M:%S')}")
-        print(Fore.GREEN + f"   {rec['amount']:.2f} {rec['from_currency']} = {rec['result']:.2f} {rec['to_currency']}")
-        print(Fore.LIGHTBLACK_EX + f"   Курс: 1 {rec['from_currency']} = {rec['exchange_rate']:.4f} {rec['to_currency']}")
+    total = 0
+    for key in order:
+        records = groups[key]
+        total += len(records)
+        from_cur, to_cur = key
+
         print()
+        print(Fore.YELLOW + Style.BRIGHT + f"  {from_cur} → {to_cur} ({len(records)} записей)")
+        print(Fore.YELLOW + Style.BRIGHT + "  ┌─────────────────────┬──────────────┬──────────────────┬──────────────┬────┐")
+        print(Fore.YELLOW + Style.BRIGHT + "  │ Дата                │ Сумма        │ Результат        │ Курс         │    │")
+        print(Fore.YELLOW + Style.BRIGHT + "  ├─────────────────────┼──────────────┼──────────────────┼──────────────┼────┤")
 
-    print(Fore.YELLOW + Style.BRIGHT + f"Всего записей: {len(history)}")
+        for i, rec in enumerate(records):
+            timestamp = datetime.fromisoformat(rec['timestamp'])
+            trend = "  "
+            if i > 0:
+                prev_rate = records[i-1]['exchange_rate']
+                if rec['exchange_rate'] > prev_rate:
+                    trend = Fore.GREEN + "▲ " + Style.RESET_ALL
+                elif rec['exchange_rate'] < prev_rate:
+                    trend = Fore.RED + "▼ " + Style.RESET_ALL
+            print(Fore.GREEN + f"  │ {timestamp.strftime('%Y-%m-%d %H:%M'):<19} │ {rec['amount']:<12.2f} │ {rec['result']:<16.2f} │ {rec['exchange_rate']:<12.4f} │ {trend}│")
+
+        print(Fore.YELLOW + Style.BRIGHT + "  └─────────────────────┴──────────────┴──────────────────┴──────────────┴────┘")
+
+        # Статистика
+        rates = [r['exchange_rate'] for r in records]
+        print(Fore.LIGHTBLACK_EX + f"  Мин: {min(rates):.4f}  Макс: {max(rates):.4f}  Средний: {sum(rates)/len(rates):.4f}")
+
+    print()
+    print(Fore.YELLOW + Style.BRIGHT + f"Всего записей: {total}")
 
 
 def print_table(amount, from_currency, rows, rates_data):
@@ -319,7 +362,8 @@ def main():
     """Главная функция программы"""
     # Проверяем флаг --history
     if len(sys.argv) > 1 and sys.argv[1] == "--history":
-        show_history()
+        filter_pair = sys.argv[2].upper() if len(sys.argv) > 2 else ""
+        show_history(filter_pair)
         return
 
     # Загружаем конфигурацию

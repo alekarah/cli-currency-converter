@@ -95,7 +95,11 @@ func loadConfig() Config {
 func main() {
 	// Проверяем флаг --history
 	if len(os.Args) > 1 && os.Args[1] == "--history" {
-		showHistory()
+		filter := ""
+		if len(os.Args) > 2 {
+			filter = strings.ToUpper(os.Args[2])
+		}
+		showHistory(filter)
 		return
 	}
 
@@ -527,8 +531,8 @@ func saveToHistory(from, to string, amount, result, rate float64, updateTime tim
 	os.WriteFile(historyFile, data, 0644)
 }
 
-// showHistory показывает историю конвертаций
-func showHistory() {
+// showHistory показывает историю конвертаций, сгруппированную по валютным парам
+func showHistory(filter string) {
 	data, err := os.ReadFile(historyFile)
 	if err != nil {
 		color.Red("❌ История конвертаций пуста или файл не найден")
@@ -547,22 +551,100 @@ func showHistory() {
 		return
 	}
 
+	// Фильтруем по паре если задан фильтр (например "USD/RUB")
+	if filter != "" {
+		parts := strings.Split(filter, "/")
+		var filtered []ConversionRecord
+		for _, rec := range history {
+			if len(parts) == 2 {
+				if rec.FromCurrency == parts[0] && rec.ToCurrency == parts[1] {
+					filtered = append(filtered, rec)
+				}
+			} else {
+				// фильтр по одной валюте
+				if rec.FromCurrency == filter || rec.ToCurrency == filter {
+					filtered = append(filtered, rec)
+				}
+			}
+		}
+		if len(filtered) == 0 {
+			color.Yellow("📝 Записей для %s не найдено", filter)
+			return
+		}
+		history = filtered
+	}
+
+	// Группируем по паре FROM/TO
+	type pairKey struct{ From, To string }
+	order := []pairKey{}
+	groups := map[pairKey][]ConversionRecord{}
+	for _, rec := range history {
+		key := pairKey{rec.FromCurrency, rec.ToCurrency}
+		if _, exists := groups[key]; !exists {
+			order = append(order, key)
+		}
+		groups[key] = append(groups[key], rec)
+	}
+
 	color.Set(color.FgGreen, color.Bold)
 	fmt.Println("╔════════════════════════════════════════╗")
 	fmt.Println("║      ИСТОРИЯ КОНВЕРТАЦИЙ               ║")
 	fmt.Println("╚════════════════════════════════════════╝")
 	color.Unset()
-	fmt.Println()
 
-	for i := len(history) - 1; i >= 0; i-- {
-		rec := history[i]
-		color.Cyan("📅 %s", rec.Timestamp.Format("2006-01-02 15:04:05"))
-		color.Green("   %.2f %s = %.2f %s", rec.Amount, rec.FromCurrency, rec.Result, rec.ToCurrency)
-		color.HiBlack("   Курс: 1 %s = %.4f %s", rec.FromCurrency, rec.ExchangeRate, rec.ToCurrency)
+	total := 0
+	for _, key := range order {
+		records := groups[key]
+		total += len(records)
+
 		fmt.Println()
+		color.Set(color.FgYellow, color.Bold)
+		fmt.Printf("  %s → %s (%d записей)\n", key.From, key.To, len(records))
+		fmt.Println("  ┌─────────────────────┬──────────────┬──────────────────┬──────────────┬────┐")
+		fmt.Println("  │ Дата                │ Сумма        │ Результат        │ Курс         │    │")
+		fmt.Println("  ├─────────────────────┼──────────────┼──────────────────┼──────────────┼────┤")
+		color.Unset()
+
+		for i, rec := range records {
+			trend := "  "
+			if i > 0 {
+				prev := records[i-1].ExchangeRate
+				if rec.ExchangeRate > prev {
+					trend = color.GreenString("▲ ")
+				} else if rec.ExchangeRate < prev {
+					trend = color.RedString("▼ ")
+				}
+			}
+			fmt.Printf("  │ %-19s │ %-12.2f │ %-16.2f │ %-12.4f │ %s │\n",
+				rec.Timestamp.Format("2006-01-02 15:04"),
+				rec.Amount,
+				rec.Result,
+				rec.ExchangeRate,
+				trend,
+			)
+		}
+
+		color.Set(color.FgYellow, color.Bold)
+		fmt.Println("  └─────────────────────┴──────────────┴──────────────────┴──────────────┴────┘")
+		color.Unset()
+
+		// Статистика
+		minRate, maxRate, sumRate := records[0].ExchangeRate, records[0].ExchangeRate, 0.0
+		for _, rec := range records {
+			if rec.ExchangeRate < minRate {
+				minRate = rec.ExchangeRate
+			}
+			if rec.ExchangeRate > maxRate {
+				maxRate = rec.ExchangeRate
+			}
+			sumRate += rec.ExchangeRate
+		}
+		avgRate := sumRate / float64(len(records))
+		color.HiBlack("  Мин: %.4f  Макс: %.4f  Средний: %.4f\n", minRate, maxRate, avgRate)
 	}
 
+	fmt.Println()
 	color.Set(color.FgYellow, color.Bold)
-	fmt.Printf("Всего записей: %d\n", len(history))
+	fmt.Printf("Всего записей: %d\n", total)
 	color.Unset()
 }
