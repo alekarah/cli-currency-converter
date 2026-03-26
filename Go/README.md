@@ -349,3 +349,19 @@ go run main.go --offline --table USD RUB,EUR,CNY 100
 - `default_from` — валюта по умолчанию (подставляется в интерактивном режиме, Enter для подтверждения)
 - `default_to` — целевая валюта по умолчанию
 - `output_format` — формат вывода: `"text"`, `"json"` или `"csv"` (перебивается флагами `--json`/`--csv`)
+
+## Тесты
+
+Запуск всех тестов:
+
+```bash
+go test ./...
+```
+
+Подробный вывод:
+
+```bash
+go test ./... -v
+```
+
+Покрытие включает: `convertCurrency`, `formatTimeAgo`, `loadConfig`, `outputCSV`, `filterHistory`.

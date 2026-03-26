@@ -72,6 +72,32 @@ const (
 	cacheTTL    = 60 * time.Minute
 )
 
+// parseConfig парсит JSON конфига в структуру Config
+func parseConfig(data []byte, cfg *Config) error {
+	return json.Unmarshal(data, cfg)
+}
+
+// filterHistory фильтрует историю по паре валют или одной валюте
+func filterHistory(history []ConversionRecord, filter string) []ConversionRecord {
+	if filter == "" {
+		return history
+	}
+	parts := strings.Split(filter, "/")
+	var result []ConversionRecord
+	for _, rec := range history {
+		if len(parts) == 2 {
+			if rec.FromCurrency == parts[0] && rec.ToCurrency == parts[1] {
+				result = append(result, rec)
+			}
+		} else {
+			if rec.FromCurrency == filter || rec.ToCurrency == filter {
+				result = append(result, rec)
+			}
+		}
+	}
+	return result
+}
+
 // loadConfig загружает конфигурацию из config.json
 func loadConfig() Config {
 	cfg := Config{
@@ -85,7 +111,7 @@ func loadConfig() Config {
 		return cfg
 	}
 
-	json.Unmarshal(data, &cfg)
+	parseConfig(data, &cfg)
 	cfg.DefaultFrom = strings.ToUpper(cfg.DefaultFrom)
 	cfg.DefaultTo = strings.ToUpper(cfg.DefaultTo)
 	cfg.OutputFormat = strings.ToLower(cfg.OutputFormat)
@@ -599,25 +625,11 @@ func showHistory(filter string) {
 
 	// Фильтруем по паре если задан фильтр (например "USD/RUB")
 	if filter != "" {
-		parts := strings.Split(filter, "/")
-		var filtered []ConversionRecord
-		for _, rec := range history {
-			if len(parts) == 2 {
-				if rec.FromCurrency == parts[0] && rec.ToCurrency == parts[1] {
-					filtered = append(filtered, rec)
-				}
-			} else {
-				// фильтр по одной валюте
-				if rec.FromCurrency == filter || rec.ToCurrency == filter {
-					filtered = append(filtered, rec)
-				}
-			}
-		}
-		if len(filtered) == 0 {
+		history = filterHistory(history, filter)
+		if len(history) == 0 {
 			color.Yellow("📝 Записей для %s не найдено", filter)
 			return
 		}
-		history = filtered
 	}
 
 	// Группируем по паре FROM/TO

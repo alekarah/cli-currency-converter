@@ -292,6 +292,16 @@ def save_to_history(from_currency, to_currency, amount, result, rate, update_tim
         pass
 
 
+def filter_history(history, filter_pair):
+    """Фильтрует историю по паре валют или одной валюте"""
+    if not filter_pair:
+        return history
+    parts = filter_pair.split("/")
+    if len(parts) == 2:
+        return [r for r in history if r['from_currency'] == parts[0] and r['to_currency'] == parts[1]]
+    return [r for r in history if r['from_currency'] == filter_pair or r['to_currency'] == filter_pair]
+
+
 def show_history(filter_pair=""):
     """Показывает историю конвертаций, сгруппированную по валютным парам"""
     if not os.path.exists(HISTORY_FILE):
@@ -311,11 +321,7 @@ def show_history(filter_pair=""):
 
     # Фильтруем по паре если задан фильтр (например "USD/RUB")
     if filter_pair:
-        parts = filter_pair.split("/")
-        if len(parts) == 2:
-            history = [r for r in history if r['from_currency'] == parts[0] and r['to_currency'] == parts[1]]
-        else:
-            history = [r for r in history if r['from_currency'] == filter_pair or r['to_currency'] == filter_pair]
+        history = filter_history(history, filter_pair)
         if not history:
             print(Fore.YELLOW + f"📝 Записей для {filter_pair} не найдено")
             return

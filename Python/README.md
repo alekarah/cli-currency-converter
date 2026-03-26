@@ -339,6 +339,16 @@ python main.py --offline --table USD RUB,EUR,CNY 100
 - `default_to` — целевая валюта по умолчанию
 - `output_format` — формат вывода: `"text"`, `"json"` или `"csv"` (перебивается флагами `--json`/`--csv`)
 
+## Тесты
+
+Запуск всех тестов:
+
+```bash
+python -m unittest test_main -v
+```
+
+Покрытие включает: `convert_currency`, `format_time_ago`, `load_config`, `output_csv`, `filter_history`.
+
 ## Отладка и разработка
 
 ### Запуск в режиме отладки:
