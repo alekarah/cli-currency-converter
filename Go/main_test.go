@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -209,12 +208,3 @@ func TestFilterHistory_NoFilter(t *testing.T) {
 	}
 }
 
-// Вспомогательная функция для проверки форматирования (не используется напрямую)
-func ExampleConvertCurrency() {
-	rates := &ExchangeRateResponse{
-		Rates: map[string]float64{"RUB": 80.0},
-	}
-	result, _ := convertCurrency(100, "USD", "RUB", rates)
-	fmt.Printf("%.2f", result)
-	// Output: 8000.00
-}
